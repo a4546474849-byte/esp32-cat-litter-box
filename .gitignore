@@ -1,0 +1,7 @@
+.pio/
+.vscode/
+*.bin
+*.zip
+.sconsign.dblite
+project.checksum
+fp_vignette.png
