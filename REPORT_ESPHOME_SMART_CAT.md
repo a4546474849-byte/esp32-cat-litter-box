@@ -124,8 +124,9 @@ image:
 
 ---
 
-## 4. Структура проекта
+## 4. Расположение файлов проекта
 
+### Основная рабочая папка (WSL):
 ```
 /home/esphome/
 ├── cat_litter_v2.yaml          # Основной конфиг ESPHome
@@ -135,7 +136,30 @@ image:
 └── .esphome/
     └── build/
         └── smart-cat-litter/   # Собранные прошивки
+            └── .pioenvs/
+                └── smart-cat-litter/
+                    └── firmware.factory.bin  # Готовая прошивка
 ```
+
+### Windows (зеркало + git):
+```
+C:\ESP32\
+├── cat_litter_v2.yaml          # Копия конфига
+├── kot_320x240.png             # Копия картинки
+├── REPORT_ESPHOME_SMART_CAT.md # Этот отчёт
+└── esphome/
+    └── cat_litter_v2.yaml      # Версия для ESPHome
+```
+
+### На устройстве:
+- **IP:** 192.168.1.16
+- **Прошивка по WiFi:** `esphome upload cat_litter_v2.yaml --device 192.168.1.16`
+- **Логи:** `esphome logs cat_litter_v2.yaml --device 192.168.1.16`
+
+### GitHub:
+- **Репозиторий:** `a4546474849-byte/esp32-cat-litter-box`
+- **Ветка:** `add-cyber-cat`
+- **Файлы:** `cat_litter_v2.yaml`, `kot_320x240.png`, `REPORT_ESPHOME_SMART_CAT.md`
 
 ---
 
