@@ -1,0 +1,210 @@
+esphome:
+  name: smart-cat-litter
+  friendly_name: "Smart Cat Litter"
+  includes:
+    - AnimatedGIF.h
+    - AnimatedGIF_merged.cpp
+    - cyd_gif.h
+    - ufo_gif_data.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: "K2"
+  password: "a4546474849"
+  fast_connect: true
+
+captive_portal:
+logger:
+api:
+ota:
+  platform: esphome
+
+spi:
+  - id: vspi_display
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+    clk_pin: GPIO14
+  - id: hspi_touch
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+    clk_pin: GPIO25
+
+display:
+  - platform: ili9xxx
+    id: tft_display
+    model: ILI9341
+    spi_id: vspi_display
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    reset_pin: GPIO21
+    invert_colors: false
+    color_order: RGB
+    dimensions:
+      width: 320
+      height: 240
+
+touchscreen:
+  - platform: xpt2046
+    id: my_touch
+    spi_id: hspi_touch
+    cs_pin: GPIO33
+    calibration:
+      x_min: 220
+      x_max: 3756
+      y_min: 394
+      y_max: 3749
+    transform:
+      swap_xy: true
+      mirror_x: true
+      mirror_y: true
+
+font:
+  - file: "gfonts://Montserrat"
+    id: font_16
+    size: 16
+    glyphsets: GF_Cyrillic_Core
+  - file: "gfonts://Montserrat"
+    id: font_24
+    size: 24
+    glyphsets: GF_Cyrillic_Core
+  - file: "gfonts://Montserrat"
+    id: font_48
+    size: 48
+    glyphsets: GF_Cyrillic_Core
+
+image:
+  - file: "kot_320x240.png"
+    id: img_kot
+    type: RGB565
+
+uart:
+  id: radar_uart
+  rx_pin: GPIO35
+  tx_pin: GPIO22
+  baud_rate: 256000
+
+ld2410:
+  id: radar
+
+binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: "Presence"
+      id: presence
+
+output:
+  - platform: ledc
+    pin: GPIO27
+    id: servo_pwm
+    frequency: 50Hz
+
+servo:
+  - id: clean_servo
+    output: servo_pwm
+
+globals:
+  - id: visit_count
+    type: int
+    restore_value: yes
+    initial_value: "0"
+  - id: sys_state
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+lvgl:
+  displays:
+    - tft_display
+  touchscreens:
+    - my_touch
+  rotation: 180
+  buffer_size: 20%
+  byte_order: big_endian
+  pages:
+    - id: lv_page_cat
+      bg_color: 0x000000
+      pad_all: 0
+      scrollbar_mode: "OFF"
+      widgets:
+        - image:
+            id: lv_img_kot
+            pad_all: 0
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            src: img_kot
+        - button:
+            id: lv_btn_flush
+            x: 108
+            y: 195
+            width: 105
+            height: 40
+            bg_color: 0x3F1F03
+            border_width: 2
+            border_color: 0x0700E0
+            radius: 15
+            on_press:
+              then:
+                - script.execute: show_ufo_animation
+            widgets:
+              - label:
+                  text: "\u0412\u0417\u041b\u0415\u0422"
+                  text_color: 0xF2F3F3
+                  text_font: font_24
+
+script:
+  - id: show_ufo_animation
+    then:
+      - lambda: |-
+          if (global_gif_player == nullptr) {
+              global_gif_player = new CYDGifPlayer();
+              global_gif_player->setup(id(tft_display));
+              global_gif_player->set_offset(110, 45);
+          }
+          global_gif_player->start();
+      - delay: 3000ms
+      - servo.write:
+          id: clean_servo
+          level: 100%
+      - delay: 2s
+      - servo.write:
+          id: clean_servo
+          level: 0%
+      - lambda: |-
+          if (global_gif_player != nullptr) global_gif_player->stop();
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          int state = id(sys_state);
+          uint32_t now = millis();
+          bool detected = id(presence).state;
+          if (state == 0) {
+              if (detected) id(sys_state) = 1;
+          } else if (state == 1) {
+              if (!detected) id(sys_state) = 0;
+              else {
+                  static uint32_t ds = 0;
+                  if (ds == 0) ds = now;
+                  if (now - ds >= 5000) { id(sys_state) = 2; ds = 0; }
+              }
+          } else if (state == 2) {
+              if (!detected) { id(visit_count) += 1; id(sys_state) = 3; }
+          } else if (state == 3) {
+              if (detected) id(sys_state) = 2;
+              else {
+                  static uint32_t cs = 0;
+                  if (cs == 0) cs = now;
+                  if (now - cs >= 30000) { id(sys_state) = 4; cs = 0; }
+              }
+          } else if (state == 4) {
+              static uint32_t cln = 0;
+              if (cln == 0) cln = now;
+              if (now - cln >= 2000) { id(sys_state) = 0; cln = 0; }
+          }

@@ -1,0 +1,192 @@
+esphome:
+  name: smart-cat-litter
+  friendly_name: "Smart Cat Litter"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+wifi:
+  ssid: "K2"
+  password: "a4546474849"
+  fast_connect: true
+
+captive_portal:
+
+logger:
+
+api:
+
+ota:
+  platform: esphome
+
+# --- SPI шины (VSPI для дисплея + HSPI для тача) ---
+spi:
+  - id: vspi_display
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+    clk_pin: GPIO14
+  - id: hspi_touch
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+    clk_pin: GPIO25
+
+# --- LVGL ---
+lvgl:
+  displays:
+    - tft_display
+  touchscreens:
+    - my_touch
+  rotation: 90
+  buffer_size: 20%
+  pages:
+    - id: main_page
+      bg_color: 0x121212
+      widgets:
+        - label:
+            id: lbl_title
+            x: 60
+            y: 10
+            width: 200
+            height: 40
+            text: "SMART CAT"
+            text_font: font_24
+            text_color: 0x10B981
+
+        - label:
+            id: lbl_status
+            x: 100
+            y: 70
+            width: 120
+            height: 50
+            text: "IDLE"
+            text_font: font_48
+            text_color: 0x10B981
+
+        - label:
+            id: lbl_visits
+            x: 100
+            y: 130
+            width: 120
+            height: 30
+            text: "Visits: 0"
+            text_font: font_16
+            text_color: 0xAAAAAA
+
+        - button:
+            id: btn_flush
+            x: 108
+            y: 180
+            width: 105
+            height: 40
+            bg_color: 0x3F1F03
+            border_width: 2
+            border_color: 0x10B981
+            radius: 8
+            on_press:
+              then:
+                - servo.write:
+                    id: clean_servo
+                    level: 100%
+                - delay: 2s
+                - servo.write:
+                    id: clean_servo
+                    level: 0%
+            widgets:
+              - label:
+                  text: "FLUSH"
+                  text_color: 0xFFFFFF
+
+# --- Дисплей ILI9341 320x240 ---
+display:
+  - platform: ili9xxx
+    id: tft_display
+    model: ili9341
+    spi_id: vspi_display
+    dc_pin: GPIO2
+    cs_pin: GPIO15
+    reset_pin: GPIO21
+    invert_colors: true
+    dimensions:
+      width: 320
+      height: 240
+    update_interval: never
+
+# --- Тачскрин XPT2046 на HSPI ---
+touchscreen:
+  - platform: xpt2046
+    id: my_touch
+    spi_id: hspi_touch
+    cs_pin: GPIO33
+    update_interval: 50ms
+    calibration:
+      x_min: 280
+      x_max: 3860
+      y_min: 340
+      y_max: 3860
+
+# --- Шрифты ---
+font:
+  - file: "gfonts://Montserrat"
+    id: font_16
+    size: 16
+  - file: "gfonts://Montserrat"
+    id: font_24
+    size: 24
+  - file: "gfonts://Montserrat"
+    id: font_48
+    size: 48
+
+# --- UART для радара LD2410C ---
+uart:
+  id: radar_uart
+  rx_pin: GPIO35
+  tx_pin: GPIO22
+  baud_rate: 256000
+
+# --- Радар LD2410C ---
+ld2410:
+  id: radar
+
+binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: "Presence"
+    has_moving_target:
+      name: "Moving Target"
+    has_still_target:
+      name: "Still Target"
+
+sensor:
+  - platform: ld2410
+    moving_distance:
+      name: "Moving Distance"
+    still_distance:
+      name: "Still Distance"
+
+# --- Серво MG995 ---
+output:
+  - platform: ledc
+    pin: GPIO27
+    id: servo_pwm
+    frequency: 50Hz
+
+servo:
+  - id: clean_servo
+    output: servo_pwm
+
+# --- Кнопка очистки ---
+button:
+  - platform: template
+    name: "Clean Now"
+    id: btn_clean
+    on_press:
+      then:
+        - servo.write:
+            id: clean_servo
+            level: 100%
+        - delay: 2s
+        - servo.write:
+            id: clean_servo
+            level: 0%
