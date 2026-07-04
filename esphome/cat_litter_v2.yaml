@@ -5,23 +5,25 @@ esphome:
 esp32:
   board: esp32dev
   framework:
-    type: arduino
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_LV_COLOR_16_SWAP: "1"
 
 wifi:
   ssid: "K2"
   password: "a4546474849"
   fast_connect: true
+  manual_ip:
+    static_ip: 192.168.1.16
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
 
 captive_portal:
-
 logger:
-
 api:
-
 ota:
   platform: esphome
 
-# --- SPI шины (VSPI для дисплея + HSPI для тача) ---
 spi:
   - id: vspi_display
     mosi_pin: GPIO13
@@ -32,120 +34,72 @@ spi:
     miso_pin: GPIO39
     clk_pin: GPIO25
 
-# --- LVGL ---
-lvgl:
-  displays:
-    - tft_display
-  touchscreens:
-    - my_touch
-  rotation: 90
-  buffer_size: 20%
-  pages:
-    - id: main_page
-      bg_color: 0x121212
-      widgets:
-        - label:
-            id: lbl_title
-            x: 60
-            y: 10
-            width: 200
-            height: 40
-            text: "SMART CAT"
-            text_font: font_24
-            text_color: 0x10B981
-
-        - label:
-            id: lbl_status
-            x: 100
-            y: 70
-            width: 120
-            height: 50
-            text: "IDLE"
-            text_font: font_48
-            text_color: 0x10B981
-
-        - label:
-            id: lbl_visits
-            x: 100
-            y: 130
-            width: 120
-            height: 30
-            text: "Visits: 0"
-            text_font: font_16
-            text_color: 0xAAAAAA
-
-        - button:
-            id: btn_flush
-            x: 108
-            y: 180
-            width: 105
-            height: 40
-            bg_color: 0x3F1F03
-            border_width: 2
-            border_color: 0x10B981
-            radius: 8
-            on_press:
-              then:
-                - servo.write:
-                    id: clean_servo
-                    level: 100%
-                - delay: 2s
-                - servo.write:
-                    id: clean_servo
-                    level: 0%
-            widgets:
-              - label:
-                  text: "FLUSH"
-                  text_color: 0xFFFFFF
-
-# --- Дисплей ILI9341 320x240 ---
 display:
   - platform: ili9xxx
     id: tft_display
-    model: ili9341
+    model: ILI9341
     spi_id: vspi_display
-    dc_pin: GPIO2
     cs_pin: GPIO15
+    dc_pin: GPIO2
     reset_pin: GPIO21
-    invert_colors: true
+    invert_colors: false
+    color_order: RGB
     dimensions:
       width: 320
       height: 240
-    update_interval: never
 
-# --- Тачскрин XPT2046 на HSPI ---
 touchscreen:
   - platform: xpt2046
     id: my_touch
     spi_id: hspi_touch
     cs_pin: GPIO33
-    update_interval: 50ms
     calibration:
-      x_min: 280
-      x_max: 3860
-      y_min: 340
-      y_max: 3860
+      x_min: 220
+      x_max: 3756
+      y_min: 394
+      y_max: 3749
+    transform:
+      swap_xy: true
+      mirror_x: true
+      mirror_y: true
 
-# --- Шрифты ---
 font:
   - file: "gfonts://Montserrat"
     id: font_16
     size: 16
+    glyphsets: GF_Cyrillic_Core
   - file: "gfonts://Montserrat"
     id: font_24
     size: 24
+    glyphsets: GF_Cyrillic_Core
   - file: "gfonts://Montserrat"
     id: font_48
     size: 48
+    glyphsets: GF_Cyrillic_Core
 
-# --- UART для радара LD2410C ---
+image:
+  - file: "kot_320x240.png"
+    id: img_kot
+    type: RGB565
+  - file: "ufo_anim/ufo_new_frames/frame_00.png"
+    id: ufo_f0
+    type: RGB565
+  - file: "ufo_anim/ufo_new_frames/frame_03.png"
+    id: ufo_f1
+    type: RGB565
+  - file: "ufo_anim/ufo_new_frames/frame_04.png"
+    id: ufo_f2
+    type: RGB565
+  - file: "ufo_anim/ufo_new_frames/frame_07.png"
+    id: ufo_f3
+    type: RGB565
+
 uart:
   id: radar_uart
   rx_pin: GPIO35
   tx_pin: GPIO22
   baud_rate: 256000
 
-# --- Радар LD2410C ---
 ld2410:
   id: radar
 
@@ -153,19 +107,8 @@ binary_sensor:
   - platform: ld2410
     has_target:
       name: "Presence"
-    has_moving_target:
-      name: "Moving Target"
-    has_still_target:
-      name: "Still Target"
+      id: presence
 
-sensor:
-  - platform: ld2410
-    moving_distance:
-      name: "Moving Distance"
-    still_distance:
-      name: "Still Distance"
-
-# --- Серво MG995 ---
 output:
   - platform: ledc
     pin: GPIO27
@@ -176,17 +119,121 @@ servo:
   - id: clean_servo
     output: servo_pwm
 
-# --- Кнопка очистки ---
-button:
-  - platform: template
-    name: "Clean Now"
-    id: btn_clean
-    on_press:
-      then:
-        - servo.write:
-            id: clean_servo
-            level: 100%
-        - delay: 2s
-        - servo.write:
-            id: clean_servo
-            level: 0%
+globals:
+  - id: visit_count
+    type: int
+    restore_value: yes
+    initial_value: "0"
+  - id: sys_state
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+lvgl:
+  displays:
+    - tft_display
+  touchscreens:
+    - my_touch
+  rotation: 180
+  buffer_size: 20%
+  byte_order: big_endian
+  pages:
+    - id: lv_page_cat
+      bg_color: 0x000000
+      pad_all: 0
+      scrollbar_mode: "OFF"
+      widgets:
+        - image:
+            id: lv_img_kot
+            pad_all: 0
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            src: img_kot
+        - button:
+            id: lv_btn_flush
+            x: 108
+            y: 195
+            width: 105
+            height: 40
+            bg_color: 0x3F1F03
+            border_width: 2
+            border_color: 0x0700E0
+            radius: 15
+            on_press:
+              then:
+                - script.execute: show_ufo_animation
+            widgets:
+              - label:
+                  text: "\u0412\u0417\u041b\u0415\u0422"
+                  text_color: 0xF2F3F3
+                  text_font: font_24
+
+    - id: lv_page_ufo
+      bg_color: 0x000000
+      pad_all: 0
+      scrollbar_mode: "OFF"
+      widgets:
+        - animimg:
+            id: lv_ufo_anim
+            pad_all: 0
+            border_width: 0
+            outline_width: 0
+            bg_opa: 0
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            src:
+              - ufo_f0
+              - ufo_f1
+              - ufo_f2
+              - ufo_f3
+            duration: 800ms
+
+script:
+  - id: show_ufo_animation
+    then:
+      - lvgl.page.show: lv_page_ufo
+      - delay: 2500ms
+      - servo.write:
+          id: clean_servo
+          level: 100%
+      - delay: 2s
+      - servo.write:
+          id: clean_servo
+          level: 0%
+      - delay: 500ms
+      - lvgl.page.show: lv_page_cat
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          int state = id(sys_state);
+          uint32_t now = millis();
+          bool detected = id(presence).state;
+          if (state == 0) {
+              if (detected) id(sys_state) = 1;
+          } else if (state == 1) {
+              if (!detected) id(sys_state) = 0;
+              else {
+                  static uint32_t ds = 0;
+                  if (ds == 0) ds = now;
+                  if (now - ds >= 5000) { id(sys_state) = 2; ds = 0; }
+              }
+          } else if (state == 2) {
+              if (!detected) { id(visit_count) += 1; id(sys_state) = 3; }
+          } else if (state == 3) {
+              if (detected) id(sys_state) = 2;
+              else {
+                  static uint32_t cs = 0;
+                  if (cs == 0) cs = now;
+                  if (now - cs >= 30000) { id(sys_state) = 4; cs = 0; }
+              }
+          } else if (state == 4) {
+              static uint32_t cln = 0;
+              if (cln == 0) cln = now;
+              if (now - cln >= 2000) { id(sys_state) = 0; cln = 0; }
+          }

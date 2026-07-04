@@ -37,7 +37,7 @@ display:
     spi_id: vspi_display
     cs_pin: GPIO15
     dc_pin: GPIO2
-    auto_clear_enabled: false
+    reset_pin: GPIO21
     invert_colors: false
     color_order: RGB
     dimensions:
@@ -76,6 +76,18 @@ font:
 image:
   - file: "kot_320x240.png"
     id: img_kot
+    type: RGB565
+  - file: "ufo_anim/frames_4/frame_00.png"
+    id: ufo_f0
+    type: RGB565
+  - file: "ufo_anim/frames_4/frame_01.png"
+    id: ufo_f1
+    type: RGB565
+  - file: "ufo_anim/frames_4/frame_02.png"
+    id: ufo_f2
+    type: RGB565
+  - file: "ufo_anim/frames_4/frame_03.png"
+    id: ufo_f3
     type: RGB565
 
 uart:
@@ -135,23 +147,6 @@ lvgl:
             width: 320
             height: 240
             src: img_kot
-        - label:
-            x: 250
-            y: 185
-            width: 55
-            height: 58
-            text: ">>"
-            text_font: font_48
-            text_align: CENTER
-            text_color: 0xFFFFFF
-        - label:
-            x: 30
-            y: 185
-            width: 50
-            height: 58
-            text: "<<"
-            text_font: font_48
-            text_color: 0xFFFFFF
         - button:
             id: lv_btn_flush
             x: 108
@@ -164,18 +159,45 @@ lvgl:
             radius: 15
             on_press:
               then:
-                - servo.write:
-                    id: clean_servo
-                    level: 100%
-                - delay: 2s
-                - servo.write:
-                    id: clean_servo
-                    level: 0%
+                - script.execute: show_ufo_animation
             widgets:
               - label:
                   text: "\u0412\u0417\u041b\u0415\u0422"
                   text_color: 0xF2F3F3
                   text_font: font_24
+
+    - id: lv_page_ufo
+      bg_color: 0x000000
+      pad_all: 0
+      scrollbar_mode: "OFF"
+      widgets:
+        - animimg:
+            id: lv_ufo_anim
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            src:
+              - ufo_f0
+              - ufo_f1
+              - ufo_f2
+              - ufo_f3
+            duration: 800ms
+
+script:
+  - id: show_ufo_animation
+    then:
+      - lvgl.page.show: lv_page_ufo
+      - delay: 2500ms
+      - servo.write:
+          id: clean_servo
+          level: 100%
+      - delay: 2s
+      - servo.write:
+          id: clean_servo
+          level: 0%
+      - delay: 500ms
+      - lvgl.page.show: lv_page_cat
 
 interval:
   - interval: 1s
@@ -200,10 +222,10 @@ interval:
               else {
                   static uint32_t cs = 0;
                   if (cs == 0) cs = now;
-                  if (now - cs >= 30000) { id(sys_state) = 4; id(clean_servo).write(1.0); cs = 0; }
+                  if (now - cs >= 30000) { id(sys_state) = 4; cs = 0; }
               }
           } else if (state == 4) {
               static uint32_t cln = 0;
               if (cln == 0) cln = now;
-              if (now - cln >= 2000) { id(clean_servo).write(0.0); id(sys_state) = 0; cln = 0; }
+              if (now - cln >= 2000) { id(sys_state) = 0; cln = 0; }
           }
